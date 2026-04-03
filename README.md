@@ -1,20 +1,22 @@
 # ML-Agents Psych
 
-Standalone package seed for the PDTW psychometric stats-writer plugin.
+Standalone package for the PDTW psychometric stats-writer plugin.
 
-This package is the extracted source-of-truth lane for the current custom
-ML-Agents logging plugin. It is intentionally seeded from the existing local
-plugin in its current form before compatibility refactors begin.
+This repository is the extracted source-of-truth lane for the custom
+ML-Agents logging plugin used by the project.
 
-Current status:
-- extracted from the local `ml-agents-local` tree
-- behavior intentionally unchanged from the seeded source
-- not yet upgraded to the newer documented `StatsWriter`-first shape
+## Status
+- extracted from the legacy local trainer tree
+- now refactored to target the documented `StatsWriter` interface directly
+- includes lightweight smoke tests for key parsing and step-offset behavior
+- not yet validated against the final pinned upgraded trainer fork
 
-Planned next steps:
-1. keep this initial extracted form as the seed version
-2. port it to the documented `StatsWriter` interface
-3. add tests for resume behavior, malformed-key safety, and bounded logging
+## Near-Term Plan
+1. validate against the pinned ML-Agents `1.1.0` trainer target
+2. harden resume behavior and malformed-key handling further if needed
+3. bound logging overhead under real training workloads
+4. publish the repository remotely once the compatibility pass is stable
 
-Seed source:
-- [Docker/v0.65/ml-agents-local/ml-agents-psych](/Users/unmukt/Documents/KepecsLab/PDTW/Unity/AuditoryNosePoke_v0.1/Docker/v0.65/ml-agents-local/ml-agents-psych)
+## Notes
+- local machine-specific paths should stay out of tracked package metadata and docs
+- this package is intended to be installed independently from the trainer source tree
