@@ -1,10 +1,19 @@
 # Tests
 
-This directory is reserved for the standalone `ml-agents-psych` package tests.
+This directory contains the standalone `ml-agents-psych` package tests.
 
-Tests are intentionally not added in the seed extraction commit. The next
-plugin-compatibility pass should add:
-- registration/import tests
-- resume-behavior tests
-- malformed-key safety tests
+## Current Local Validation Lane
+
+Create an isolated Python 3.10 environment with `uv` and run the standalone tests:
+
+```bash
+uv venv --python python3.10 tests/.venv
+uv pip install --python tests/.venv/bin/python -e . pytest
+tests/.venv/bin/python -m pytest -q tests/test_psych_stats_writer.py
+```
+
+## Coverage Focus
+- registration/import behavior
+- resume-behavior correctness
+- malformed-key safety
 - bounded logging-volume checks
