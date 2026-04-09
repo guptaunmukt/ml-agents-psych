@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from mlagents.trainers.settings import RunOptions
@@ -44,12 +45,13 @@ class PsychStatsWriter(StatsWriter):
         self.hidden_keys = set(hidden_keys or [])
         self.summary_writers: Dict[str, SummaryWriter] = {}
         self.step_offsets: Dict[str, int] = {}
+        self.time_offsets: Dict[str, float] = {}
 
     def write_stats(
         self, category: str, values: Dict[str, StatsSummary], step: int
     ) -> None:
         self._maybe_create_summary_writer(category)
-        self._update_step_offsets(values, step)
+        self._update_offsets(values, step)
 
         writer = self.summary_writers[category]
 
@@ -79,7 +81,9 @@ class PsychStatsWriter(StatsWriter):
             if count == 0:
                 continue
 
-            if count != time_count or count != step_count or (value_summary and count != value_count):
+            if count != time_count or count != step_count or (
+                value_summary and count != value_count
+            ):
                 logger.warning(
                     "Psych stat series length mismatch for %s; using truncated count %s.",
                     key,
@@ -87,15 +91,22 @@ class PsychStatsWriter(StatsWriter):
                 )
 
             step_offset = self.step_offsets.get(task, 0)
+            time_offset = self.time_offsets.get(task, 0.0)
 
             for ix in range(count):
                 scalar_value = value_summary.full_dist[ix] if value_summary else 0.0
                 global_step = int(step_summary.full_dist[ix]) + step_offset
-                writer.add_scalar(f"{task}/Psych/{event}", scalar_value, global_step)
+                walltime = float(summary.full_dist[ix]) + time_offset
+                writer.add_scalar(
+                    f"{task}/Psych/{event}",
+                    scalar_value,
+                    global_step,
+                    walltime=walltime,
+                )
 
         writer.flush()
 
-    def _update_step_offsets(
+    def _update_offsets(
         self, values: Dict[str, StatsSummary], step: int
     ) -> None:
         for key, summary in values.items():
@@ -106,12 +117,21 @@ class PsychStatsWriter(StatsWriter):
 
             task = key[: -len(f"{_VALUE_MARKER}{_SESSION_START}")]
             session_step_key = f"{task}{_STEP_MARKER}{_SESSION_START}"
+            session_time_key = f"{task}{_TIME_MARKER}{_SESSION_START}"
+
             session_step_summary = values.get(session_step_key)
+            session_time_summary = values.get(session_time_key)
+
             session_step = 0
             if session_step_summary and session_step_summary.full_dist:
                 session_step = int(session_step_summary.full_dist[0])
 
+            session_time = 0.0
+            if session_time_summary and session_time_summary.full_dist:
+                session_time = float(session_time_summary.full_dist[0])
+
             self.step_offsets[task] = int(step) - session_step
+            self.time_offsets[task] = time.time() - session_time
 
     def _maybe_create_summary_writer(self, category: str) -> None:
         if category in self.summary_writers:

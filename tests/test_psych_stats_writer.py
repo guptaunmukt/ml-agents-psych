@@ -11,8 +11,8 @@ class FakeSummaryWriter:
         self.scalars = []
         self.flushed = False
 
-    def add_scalar(self, tag, value, global_step=None):
-        self.scalars.append((tag, value, global_step))
+    def add_scalar(self, tag, value, global_step=None, walltime=None):
+        self.scalars.append((tag, value, global_step, walltime))
 
     def flush(self):
         self.flushed = True
@@ -85,9 +85,10 @@ def test_split_time_key_extracts_task_and_event():
     assert module._split_time_key("Environment/Cumulative Reward") is None
 
 
-def test_writer_uses_prefixed_session_start_to_offset_steps(tmp_path):
+def test_writer_uses_prefixed_session_start_to_offset_steps_and_walltime(tmp_path):
     StatsSummary = install_stub_modules()
     module = load_module()
+    module.time.time = lambda: 1000.0
 
     writer = module.PsychStatsWriter(str(tmp_path), clear_past_data=False)
     values = {
@@ -102,7 +103,12 @@ def test_writer_uses_prefixed_session_start_to_offset_steps(tmp_path):
     writer.write_stats("2DPoke", values, step=100)
     summary_writer = writer.summary_writers["2DPoke"]
 
-    assert ("2AFC/Psych/Enter/TrialStart", 1.0, 105) in summary_writer.scalars
+    assert (
+        "2AFC/Psych/Enter/TrialStart",
+        1.0,
+        105,
+        1002.0,
+    ) in summary_writer.scalars
     assert summary_writer.flushed is True
 
 
