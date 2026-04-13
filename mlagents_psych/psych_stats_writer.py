@@ -15,6 +15,8 @@ _TIME_MARKER = "/Raw/Time/"
 _STEP_MARKER = "/Raw/Step/"
 _VALUE_MARKER = "/Raw/Value/"
 _SESSION_START = "SessionStart"
+_OPTIONAL_VALUE_EVENT_PREFIXES = ("Enter/", "Exit/")
+_OPTIONAL_VALUE_EVENT_NAMES = frozenset({"TrialInit", "CenterIn", "CenterOut"})
 
 
 def _split_time_key(key: str) -> Optional[Tuple[str, str]]:
@@ -24,6 +26,10 @@ def _split_time_key(key: str) -> Optional[Tuple[str, str]]:
     if not task or not event:
         return None
     return task, event
+
+
+def _is_optional_value_event(event: str) -> bool:
+    return event.startswith(_OPTIONAL_VALUE_EVENT_PREFIXES) or event in _OPTIONAL_VALUE_EVENT_NAMES
 
 
 class PsychStatsWriter(StatsWriter):
@@ -69,10 +75,13 @@ class PsychStatsWriter(StatsWriter):
 
             step_summary = values.get(step_key)
             if step_summary is None or not step_summary.full_dist:
-                logger.debug("Skipping psych stat without step series: %s", key)
+                logger.warning("Skipping psych stat without step series: %s", key)
                 continue
 
             value_summary = values.get(value_key)
+            if value_summary is not None and not value_summary.full_dist:
+                value_summary = None
+
             time_count = len(summary.full_dist)
             step_count = len(step_summary.full_dist)
             value_count = len(value_summary.full_dist) if value_summary else time_count
@@ -112,10 +121,21 @@ class PsychStatsWriter(StatsWriter):
         for key, summary in values.items():
             if not key.endswith(f"{_VALUE_MARKER}{_SESSION_START}"):
                 continue
-            if not summary.full_dist or summary.full_dist[0] != 1:
+            if not summary.full_dist:
+                continue
+
+            session_indices = [ix for ix, val in enumerate(summary.full_dist) if val == 1]
+            if not session_indices:
                 continue
 
             task = key[: -len(f"{_VALUE_MARKER}{_SESSION_START}")]
+            if len(session_indices) > 1:
+                logger.warning(
+                    "Multiple SessionStart markers for %s in one summary write; using the last item for offsets.",
+                    task,
+                )
+            session_ix = session_indices[-1]
+
             session_step_key = f"{task}{_STEP_MARKER}{_SESSION_START}"
             session_time_key = f"{task}{_TIME_MARKER}{_SESSION_START}"
 
@@ -123,12 +143,22 @@ class PsychStatsWriter(StatsWriter):
             session_time_summary = values.get(session_time_key)
 
             session_step = 0
-            if session_step_summary and session_step_summary.full_dist:
-                session_step = int(session_step_summary.full_dist[0])
+            if session_step_summary and len(session_step_summary.full_dist) > session_ix:
+                session_step = int(session_step_summary.full_dist[session_ix])
+            else:
+                logger.warning(
+                    "SessionStart step series missing or too short for %s; using 0 for step offset.",
+                    task,
+                )
 
             session_time = 0.0
-            if session_time_summary and session_time_summary.full_dist:
-                session_time = float(session_time_summary.full_dist[0])
+            if session_time_summary and len(session_time_summary.full_dist) > session_ix:
+                session_time = float(session_time_summary.full_dist[session_ix])
+            else:
+                logger.warning(
+                    "SessionStart time series missing or too short for %s; using 0.0 for time offset.",
+                    task,
+                )
 
             self.step_offsets[task] = int(step) - session_step
             self.time_offsets[task] = time.time() - session_time

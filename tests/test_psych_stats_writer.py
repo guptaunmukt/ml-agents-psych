@@ -18,7 +18,40 @@ class FakeSummaryWriter:
         self.flushed = True
 
 
+class FakeLogger:
+    def __init__(self):
+        self.messages = {
+            "info": [],
+            "debug": [],
+            "warning": [],
+            "error": [],
+        }
+
+    def _record(self, level, msg, *args, **kwargs):
+        if args:
+            msg = msg % args
+        self.messages[level].append(msg)
+
+    def info(self, *args, **kwargs):
+        self._record("info", *args, **kwargs)
+
+    def debug(self, *args, **kwargs):
+        self._record("debug", *args, **kwargs)
+
+    def warning(self, *args, **kwargs):
+        self._record("warning", *args, **kwargs)
+
+    def error(self, *args, **kwargs):
+        self._record("error", *args, **kwargs)
+
+
+FAKE_LOGGER = FakeLogger()
+
+
 def install_stub_modules():
+    global FAKE_LOGGER
+    FAKE_LOGGER = FakeLogger()
+
     stats_module = types.ModuleType("mlagents.trainers.stats")
     StatsSummary = namedtuple("StatsSummary", ["full_dist", "aggregation_method"])
 
@@ -36,21 +69,7 @@ def install_stub_modules():
     settings_module.RunOptions = RunOptions
 
     logging_module = types.ModuleType("mlagents_envs.logging_util")
-
-    class Logger:
-        def info(self, *args, **kwargs):
-            pass
-
-        def debug(self, *args, **kwargs):
-            pass
-
-        def warning(self, *args, **kwargs):
-            pass
-
-        def error(self, *args, **kwargs):
-            pass
-
-    logging_module.get_logger = lambda name: Logger()
+    logging_module.get_logger = lambda name: FAKE_LOGGER
 
     tensorboard_module = types.ModuleType("torch.utils.tensorboard")
     tensorboard_module.SummaryWriter = FakeSummaryWriter
@@ -112,7 +131,7 @@ def test_writer_uses_prefixed_session_start_to_offset_steps_and_walltime(tmp_pat
     assert summary_writer.flushed is True
 
 
-def test_writer_skips_missing_step_series_without_crashing(tmp_path):
+def test_writer_warns_and_skips_missing_step_series(tmp_path):
     StatsSummary = install_stub_modules()
     module = load_module()
 
@@ -125,4 +144,60 @@ def test_writer_skips_missing_step_series_without_crashing(tmp_path):
     writer.write_stats("2DPoke", values, step=100)
     summary_writer = writer.summary_writers["2DPoke"]
     assert summary_writer.scalars == []
+    assert any(
+        "Skipping psych stat without step series" in msg
+        for msg in module.logger.messages["warning"]
+    )
     assert summary_writer.flushed is True
+
+
+def test_writer_emits_zero_fallback_when_value_series_is_missing(tmp_path):
+    StatsSummary = install_stub_modules()
+    module = load_module()
+
+    writer = module.PsychStatsWriter(str(tmp_path), clear_past_data=False)
+    values = {
+        "2AFC/Raw/Time/PerceptSignal": StatsSummary([2.0], None),
+        "2AFC/Raw/Step/PerceptSignal": StatsSummary([5.0], None),
+    }
+
+    writer.write_stats("2DPoke", values, step=100)
+    summary_writer = writer.summary_writers["2DPoke"]
+
+    assert (
+        "2AFC/Psych/PerceptSignal",
+        0.0,
+        5,
+        2.0,
+    ) in summary_writer.scalars
+    assert module.logger.messages["warning"] == []
+
+
+def test_writer_uses_last_session_start_when_multiple_markers_exist(tmp_path):
+    StatsSummary = install_stub_modules()
+    module = load_module()
+    module.time.time = lambda: 5000.0
+
+    writer = module.PsychStatsWriter(str(tmp_path), clear_past_data=False)
+    values = {
+        "2AFC/Raw/Value/SessionStart": StatsSummary([1.0, 1.0], None),
+        "2AFC/Raw/Step/SessionStart": StatsSummary([10.0, 20.0], None),
+        "2AFC/Raw/Time/SessionStart": StatsSummary([100.0, 200.0], None),
+        "2AFC/Raw/Time/Enter/TrialStart": StatsSummary([201.0], None),
+        "2AFC/Raw/Step/Enter/TrialStart": StatsSummary([21.0], None),
+        "2AFC/Raw/Value/Enter/TrialStart": StatsSummary([1.0], None),
+    }
+
+    writer.write_stats("2DPoke", values, step=1000)
+    summary_writer = writer.summary_writers["2DPoke"]
+
+    assert (
+        "2AFC/Psych/Enter/TrialStart",
+        1.0,
+        1001,
+        5001.0,
+    ) in summary_writer.scalars
+    assert any(
+        "Multiple SessionStart markers for 2AFC in one summary write" in msg
+        for msg in module.logger.messages["warning"]
+    )
