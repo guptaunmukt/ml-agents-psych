@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Sequence, Tuple
 
 from mlagents.trainers.exception import TrainerConfigError
@@ -22,6 +23,10 @@ def _sensor_name(spec: object) -> str:
     if sensor_name is None or sensor_name == "":
         return "<unnamed>"
     return str(sensor_name)
+
+
+def _canonical_sensor_name(sensor_name: str) -> str:
+    return re.sub(r"^StackingSensor_size\d+_", "", sensor_name)
 
 
 def _available_sensor_names(observation_specs: Sequence[object]) -> Tuple[str, ...]:
@@ -49,7 +54,7 @@ def resolve_modal_curiosity_branches(
         matches = tuple(
             (index, _sensor_name(spec))
             for index, spec in enumerate(observation_specs)
-            if _sensor_name(spec) in candidate_names
+            if _canonical_sensor_name(_sensor_name(spec)) in candidate_names
         )
         if not matches:
             available_names = ", ".join(_available_sensor_names(observation_specs))

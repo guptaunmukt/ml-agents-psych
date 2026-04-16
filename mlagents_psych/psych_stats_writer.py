@@ -124,17 +124,13 @@ class PsychStatsWriter(StatsWriter):
             if not summary.full_dist:
                 continue
 
-            session_indices = [ix for ix, val in enumerate(summary.full_dist) if val == 1]
-            if not session_indices:
-                continue
-
             task = key[: -len(f"{_VALUE_MARKER}{_SESSION_START}")]
-            if len(session_indices) > 1:
+            if len(summary.full_dist) > 1:
                 logger.warning(
                     "Multiple SessionStart markers for %s in one summary write; using the last item for offsets.",
                     task,
                 )
-            session_ix = session_indices[-1]
+            session_ix = len(summary.full_dist) - 1
 
             session_step_key = f"{task}{_STEP_MARKER}{_SESSION_START}"
             session_time_key = f"{task}{_TIME_MARKER}{_SESSION_START}"

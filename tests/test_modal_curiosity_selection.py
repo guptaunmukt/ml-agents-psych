@@ -130,3 +130,25 @@ def test_missing_visual_sensor_raises_config_error():
         assert "modal_curiosity.visual" in str(exc)
     else:
         raise AssertionError("Expected TrainerConfigError for missing visual sensor")
+
+
+def test_stacking_sensor_alias_resolves_to_visual_branch():
+    install_stub_modules()
+    config, selection = load_modules()
+    ObservationSpec = namedtuple("ObservationSpec", ["name"])
+
+    settings = config.ModalCuriositySettings(
+        visual=config.ModalCuriosityBranchSettings(strength=1.0),
+        auditory=config.ModalCuriosityBranchSettings(strength=0.5),
+    )
+    resolved = selection.resolve_modal_curiosity_branches(
+        [
+            ObservationSpec("Auditory Spectrogram"),
+            ObservationSpec("StackingSensor_size4_RatVisualField"),
+        ],
+        settings,
+    )
+
+    assert [branch.name for branch in resolved] == ["visual", "auditory"]
+    assert resolved[0].observation_names == ("StackingSensor_size4_RatVisualField",)
+    assert resolved[1].observation_names == ("Auditory Spectrogram",)

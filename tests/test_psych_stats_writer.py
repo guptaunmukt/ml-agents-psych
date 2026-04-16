@@ -180,7 +180,7 @@ def test_writer_uses_last_session_start_when_multiple_markers_exist(tmp_path):
 
     writer = module.PsychStatsWriter(str(tmp_path), clear_past_data=False)
     values = {
-        "2AFC/Raw/Value/SessionStart": StatsSummary([1.0, 1.0], None),
+        "2AFC/Raw/Value/SessionStart": StatsSummary([1.0, 2.0], None),
         "2AFC/Raw/Step/SessionStart": StatsSummary([10.0, 20.0], None),
         "2AFC/Raw/Time/SessionStart": StatsSummary([100.0, 200.0], None),
         "2AFC/Raw/Time/Enter/TrialStart": StatsSummary([201.0], None),
@@ -201,3 +201,44 @@ def test_writer_uses_last_session_start_when_multiple_markers_exist(tmp_path):
         "Multiple SessionStart markers for 2AFC in one summary write" in msg
         for msg in module.logger.messages["warning"]
     )
+
+
+def test_writer_offsets_from_session_start_even_when_session_value_is_not_one(tmp_path):
+    StatsSummary = install_stub_modules()
+    module = load_module()
+    module.time.time = lambda: 8000.0
+
+    writer = module.PsychStatsWriter(str(tmp_path), clear_past_data=False)
+    values = {
+        "2AFC/Raw/Value/SessionStart": StatsSummary([3.0], None),
+        "2AFC/Raw/Step/SessionStart": StatsSummary([40.0], None),
+        "2AFC/Raw/Time/SessionStart": StatsSummary([400.0], None),
+        "2AFC/Raw/Time/TrialStart": StatsSummary([401.0, 402.0], None),
+        "2AFC/Raw/Step/TrialStart": StatsSummary([41.0, 42.0], None),
+        "2AFC/Raw/Value/TrialStart": StatsSummary([1.0, 2.0], None),
+        "2AFC/Raw/Time/TrialEnd": StatsSummary([410.0], None),
+        "2AFC/Raw/Step/TrialEnd": StatsSummary([50.0], None),
+        "2AFC/Raw/Value/TrialEnd": StatsSummary([2.0], None),
+    }
+
+    writer.write_stats("2DPoke", values, step=1000)
+    summary_writer = writer.summary_writers["2DPoke"]
+
+    assert (
+        "2AFC/Psych/TrialStart",
+        1.0,
+        1001,
+        8001.0,
+    ) in summary_writer.scalars
+    assert (
+        "2AFC/Psych/TrialStart",
+        2.0,
+        1002,
+        8002.0,
+    ) in summary_writer.scalars
+    assert (
+        "2AFC/Psych/TrialEnd",
+        2.0,
+        1010,
+        8010.0,
+    ) in summary_writer.scalars
