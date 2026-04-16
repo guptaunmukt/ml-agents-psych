@@ -5,7 +5,7 @@ ML_AGENTS_TRAINER_TYPE = "mlagents.trainer_type"
 
 setup(
     name="mlagents_psych",
-    version="0.0.3",
+    version="0.0.4",
     packages=find_packages(exclude=["tests", "tests.*"]),
     zip_safe=False,
     entry_points={
