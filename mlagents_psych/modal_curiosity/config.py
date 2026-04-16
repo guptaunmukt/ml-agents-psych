@@ -51,3 +51,9 @@ class PPOModalCuriositySettings(PPOSettings):
     modal_curiosity: ModalCuriositySettings = attr.ib(
         factory=ModalCuriositySettings
     )
+
+
+if hasattr(attr, "resolve_types"):
+    attr.resolve_types(ModalCuriosityBranchSettings)
+    attr.resolve_types(ModalCuriositySettings)
+    attr.resolve_types(PPOModalCuriositySettings)
